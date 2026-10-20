@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {validateEvent} from '../lib/events.js';
+import {csvCell,percent} from '../src/metrics.js';
+const event=()=>({id:randomUUID(),session_id:randomUUID(),run_id:randomUUID(),event:'result',step:null,payload:{answers:[0,[1],0,0,0,0,0,0,0,0,0],lead:{name:'Exemplo',business:'Teste',city:'Niterói',phone:'(21) 99999-0000'},total:999}});
+test('pontuação calculada no servidor ignora a nota enviada pelo cliente',()=>{const b=event();const data=validateEvent(b);assert.equal(data.payload.total,100);assert.deepEqual(data.payload.scores,[100,100,100]);b.payload.answers=[3,[0],3,3,3,3,3,3,3,3,3];assert.equal(validateEvent(b).payload.total,0)});
+test('contatos inválidos e respostas fora da escala são rejeitados',()=>{const b=event();b.payload.lead.phone='123';assert.throws(()=>validateEvent(b),/invalid_contact/);b.payload.lead.phone='21999990000';b.payload.answers[5]=10;assert.throws(()=>validateEvent(b),/invalid_answers/)});
+test('eventos de navegação não aceitam dados pessoais no payload',()=>{const b=event();b.event='page_view';const data=validateEvent(b);assert.equal(data.payload.lead,undefined);assert.equal(data.payload.answers,undefined)});
+test('CSV neutraliza fórmulas e escapa aspas',()=>{assert.equal(csvCell('=HYPERLINK("x")'),'"\'=HYPERLINK(""x"")"');assert.equal(csvCell('Maria'),'"Maria"');assert.equal(percent(0,0),'—');assert.equal(percent(1,4),'25%')});

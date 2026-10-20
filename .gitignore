@@ -5,3 +5,8 @@ node_modules/
 
 .vercel
 .env*
+
+.agents/
+skills-lock.json
+
+dist/dashboard.js
