@@ -1,6 +1,6 @@
 const key=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
-const locationAliases=[['cidade','city','municipio','municipality','addresscity'],['cidaderegiao','cidadeeregiao','cityregion','cityandregion','regiao','region','localidade'],['bairro','neighborhood','neighbourhood','district','addressneighborhood','addressdistrict']];
-const aliases={name:['nome','name','contato','responsavel','nomedocontato'],business:['imobiliaria','empresa','business','company','title','nomedaempresa'],phone:['whatsapp','telefone','phone','celular','numero','phoneunformatted'],email:['email','emailaddress'],city:locationAliases.flat(),website:['site','website','url','web'],instagram:['instagram','insta'],notes:['observacoes','observacao','notes','notas','contexto'],source:['origem','source','fonte'],focus:['foco','focus','interesse']};
+const locationAliases=[['cidade','city','municipio','municipality','addresscity'],['cidaderegiao','cidadeeregiao','cityregion','cityandregion','regiao','region','localidade','local','location','localizacao','formattedlocation'],['bairro','neighborhood','neighbourhood','district','addressneighborhood','addressdistrict']];
+const aliases={name:['nome','name','fullname','contato','responsavel','nomedocontato'],business:['imobiliaria','empresa','business','company','companyname','currentcompany','title','nomedaempresa'],job_title:['cargo','funcao','jobtitle','position','currenttitle','currentposition'],linkedin:['linkedin','linkedinurl','profileurl','linkedinprofile','profilelink','urlperfil','perfillinkedin'],phone:['whatsapp','telefone','phone','celular','numero','phoneunformatted'],email:['email','emailaddress'],city:locationAliases.flat(),website:['site','website','url','web'],instagram:['instagram','insta'],notes:['observacoes','observacao','notes','notas','contexto'],source:['origem','source','fonte'],focus:['foco','focus','interesse']};
 export function parseTable(text){
  text=String(text).replace(/^\uFEFF/,'');
  const head=text.split(/\r?\n/)[0];
@@ -11,7 +11,7 @@ export function parseTable(text){
  row.push(field);if(row.some(x=>x.trim()))rows.push(row);
  if(rows.length<2)throw Error('Inclua o cabeçalho e pelo menos um contato.');
  const headers=rows.shift().map(key),mapping={};for(const [field,names]of Object.entries(aliases)){const n=headers.findIndex(h=>names.includes(h));if(n>=0)mapping[field]=n;}
- if(mapping.phone===undefined||mapping.name===undefined&&mapping.business===undefined)throw Error('O cabeçalho precisa de WhatsApp/telefone e nome ou imobiliária.');
+ if(mapping.phone===undefined&&mapping.linkedin===undefined||mapping.name===undefined&&mapping.business===undefined)throw Error('O cabeçalho precisa de nome ou empresa e de Telefone/WhatsApp ou LinkedIn.');
  if(rows.length>5000)throw Error('Limite de 5.000 linhas por arquivo. Divida a importação.');
  const locationColumns=locationAliases.map(names=>names.map(name=>headers.indexOf(name)).filter(n=>n>=0));
  return rows.map((r,i)=>{

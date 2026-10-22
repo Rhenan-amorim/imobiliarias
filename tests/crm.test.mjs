@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizePhone,validateLead,makeMessages,actionStage,waLink} from '../lib/crm-domain.js';
+import {normalizePhone,normalizeLinkedIn,validateLead,makeMessages,actionStage,waLink} from '../lib/crm-domain.js';
 import {parseTable} from '../src/crm-import.js';
 test('normalizes WhatsApp and rejects malformed leads',()=>{
  assert.equal(normalizePhone('(21) 97114-6102'),'5521971146102');
@@ -22,6 +22,24 @@ test('lead profile persists and existing leads default to agencies',()=>{
  const broker=validateLead({...base,lead_type:'broker'});
  assert.equal(validateLead(JSON.parse(JSON.stringify(broker))).lead_type,'broker');
  assert.throws(()=>validateLead({...base,lead_type:'unknown'}));
+});
+test('LinkedIn contacts keep valid case-sensitive profile identifiers and reject unsafe links',()=>{
+ assert.equal(normalizeLinkedIn('https://br.linkedin.com/in/ACwAAExample/?trk=search#details'),'https://www.linkedin.com/in/ACwAAExample');
+ assert.equal(normalizeLinkedIn('linkedin.com/in/gestor-exemplo/'),'https://www.linkedin.com/in/gestor-exemplo');
+ for(const value of ['https://linkedin.com.evil.test/in/name','javascript:alert(1)','https://www.linkedin.com/company/example','https://user:secret@linkedin.com/in/name'])assert.throws(()=>normalizeLinkedIn(value));
+ const manager=validateLead({lead_type:'manager',name:'Gestor Exemplo',business:'Construtora Exemplo',job_title:'Gerente comercial',city:'Niterói, RJ',linkedin:'https://www.linkedin.com/in/gestor-exemplo'});
+ assert.equal(manager.phone,null);assert.equal(manager.lead_type,'manager');assert.equal(manager.job_title,'Gerente comercial');
+ assert.equal(manager.business,'Construtora Exemplo');assert.equal(manager.city,'Niterói, RJ');
+ assert.throws(()=>validateLead({lead_type:'manager',name:'Sem canal'}));
+ assert.throws(()=>validateLead({...manager,phone:'123'}));
+ const messages=makeMessages(manager);assert.match(messages.first,/Gerente comercial/);assert.match(messages.first,/Construtora Exemplo/);
+});
+test('manager CSV maps every source column and accepts several contacts without phone',()=>{
+ const csv='Nome,Cargo,Empresa,Local,LinkedIn\r\nGestor Um,Gerente comercial,Construtora Exemplo,"São Gonçalo, RJ",https://www.linkedin.com/in/gestor-um\r\nGestora Dois,Diretora comercial,Incorporadora Exemplo,"Niterói, RJ",https://www.linkedin.com/in/gestora-dois';
+ const rows=parseTable(csv).map(r=>validateLead({...r.lead,lead_type:'manager'}));
+ assert.equal(rows.length,2);assert.ok(rows.every(r=>r.phone===null));assert.notEqual(rows[0].linkedin,rows[1].linkedin);
+ assert.equal(rows[0].name,'Gestor Um');assert.equal(rows[0].job_title,'Gerente comercial');assert.equal(rows[0].business,'Construtora Exemplo');assert.equal(rows[0].city,'São Gonçalo, RJ');
+ assert.equal(rows[0].linkedin,'https://www.linkedin.com/in/gestor-um');
 });
 test('broker messages address the professional across the entire sales flow',()=>{
  const messages=makeMessages({lead_type:'broker',name:'Amorim Silva',business:'Empresa Associada',city:'São Gonçalo',id:'broker-test',focus:'site',diagnostic:{scores:[20,30,40]}});

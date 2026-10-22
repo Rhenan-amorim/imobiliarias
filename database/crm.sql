@@ -1,6 +1,8 @@
 create table if not exists public.crm_leads (
  id uuid primary key default gen_random_uuid(),
- phone text not null unique,
+ phone text unique,
+ linkedin text,
+ constraint crm_leads_contact_required check(phone is not null or linkedin is not null),
  data jsonb not null default '{}',
  stage text not null default 'new' check(stage in ('new','contacted','qualification','meeting','proposal','won','lost')),
  messages jsonb not null default '{}',
@@ -14,6 +16,7 @@ create table if not exists public.crm_leads (
  next_due timestamptz,
  version integer not null default 1
 );
+create unique index if not exists crm_leads_linkedin_idx on public.crm_leads(linkedin);
 create index if not exists crm_leads_stage_idx on public.crm_leads(stage,stage_entered_at);
 create index if not exists crm_leads_due_idx on public.crm_leads(next_due) where stage not in ('won','lost');
 alter table public.crm_leads enable row level security;
@@ -42,7 +45,8 @@ begin
  target=coalesce(p_patch->>'stage',old.stage);
  update public.crm_leads set
  data=case when p_patch?'data' then p_patch->'data' else data end,
- phone=coalesce(p_patch->>'phone',phone),stage=target,
+ phone=case when p_patch?'phone' then p_patch->>'phone' else phone end,
+ linkedin=case when p_patch?'linkedin' then p_patch->>'linkedin' else linkedin end,stage=target,
  messages=case when p_patch?'messages' then p_patch->'messages' else messages end,
  stage_entered_at=case when target<>old.stage then now() else stage_entered_at end,
  next_due=case when p_patch?'next_due' then (p_patch->>'next_due')::timestamptz else next_due end,

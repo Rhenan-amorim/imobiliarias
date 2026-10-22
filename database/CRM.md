@@ -4,10 +4,10 @@ O painel privado abre o CRM e mantém as métricas em outra aba. A chave de aces
 
 ## Uso
 
-- Antes de carregar uma lista, selecione **Imobiliária** ou **Corretor**. O perfil escolhido vale para todos os novos leads do lote e adapta as cinco mensagens. A prévia permite conferir um exemplo. Cadastros anteriores sem perfil explícito continuam classificados como Imobiliária. Duplicados não têm seu perfil alterado pela importação.
+- Antes de carregar uma lista, selecione **Imobiliária**, **Corretor** ou **Gestor imobiliário**. O perfil escolhido vale para todos os novos leads do lote e adapta as cinco mensagens. A prévia permite conferir um exemplo. Cadastros anteriores sem perfil explícito continuam classificados como Imobiliária. Duplicados não têm seu perfil alterado pela importação.
 - No cadastro manual e na ficha existe o campo Perfil do lead. Alterá-lo recria as sugestões para revisão; salve para confirmar a mudança.
 
-- Cadastre manualmente ou importe CSV/tabela colada do Excel, com cabeçalho. Há modelo para download e prévia de validação. Limite: 5.000 linhas por importação, em lotes de 200. Duplicados pelo WhatsApp são ignorados.
+- Cadastre manualmente ou importe CSV/tabela colada do Excel, com cabeçalho. Há modelo para download e prévia de validação. Limite: 5.000 linhas por importação, em lotes de 200. Duplicados pelo WhatsApp ou perfil do LinkedIn são ignorados.
 - Preencha imobiliária, contato, região e prioridade comercial. Revise as sugestões e edite quando necessário. A geração usa modelos com dados cadastrados, prioridade, categoria da resposta e diagnóstico vinculado; não consulta sites nem modelos de IA externos.
 - Primeira abordagem abre o WhatsApp e move Novo para 1ª abordagem, com retorno em 2 dias.
 - Após uma resposta, registre o conteúdo e selecione sua categoria. A segunda mensagem inclui o diagnóstico e move o lead para Em qualificação, com retorno em 3 dias.
@@ -26,3 +26,11 @@ Até 700 px, o CRM abre em lista de cartões. Cada lead tem Abrir lead e um bot�
 Migration aditiva: `database/crm.sql`, aplicada por `node --env-file=.env.local scripts/crm-schema.mjs`. Tabelas com RLS e sem permissões públicas; acesso pelo backend autenticado. Alterações de ficha usam bloqueio transacional e versão para prevenir perda de atualização. Eventos de mensagem têm identificador idempotente.
 
 `npm test`: testes de autenticação, validação, mensagens, importação, etapas e métricas. Fluxo integrado validado com cadastros sintéticos: API → banco → histórico → resposta; UI de cadastro, edição e importação. Os cadastros de teste foram removidos, sem mensagens enviadas.
+
+## Gestores do LinkedIn
+
+Importar com perfil Gestor imobiliário. Colunas reconhecidas: Nome → name; Cargo → job_title; Empresa → business; Local → city; LinkedIn → linkedin. Telefone é opcional quando existe um perfil válido do LinkedIn. Há identificação única por telefone e por URL normalizada do perfil. A mesma lista pode ser importada novamente sem duplicar os contatos.
+
+A ficha permite abrir o perfil e copiar as mensagens para envio manual no LinkedIn. Abrir o perfil ou copiar texto não muda a etapa. O WhatsApp fica desabilitado até cadastrar um número. As etapas podem ser registradas manualmente na ficha.
+
+Migração de instalações existentes: `node --env-file=.env.local scripts/crm-schema.mjs crm-linkedin.sql`. O telefone passa a aceitar NULL e a URL do LinkedIn ganha índice único; ao menos um dos dois contatos é obrigatório no banco.
