@@ -1,3 +1,4 @@
+import {mountCRM} from './crm.js';
 import {csvCell,percent} from './metrics.js';
 const root=document.getElementById('dashboard'),signout=document.getElementById('signout');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -6,6 +7,7 @@ const questionList=window.AmorimQuestions;
 const fmt=n=>Number(n||0).toLocaleString('pt-BR');
 const date=s=>new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}).format(new Date(s));
 const day=d=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
+let disposeCrm=()=>{};
 let accessKey='',rows=[],page=0,hasMore=false,search='',metrics=null,loading=false;
 const today=day(new Date());
 let start=day(new Date(Date.now()-29*86400000)),end=today;
@@ -23,7 +25,7 @@ function privateAccess(message='Abra o link privado completo que recebeu para ac
 }
 function skeleton(){
  signout.hidden=false;
- root.innerHTML=`<section class="panel-heading"><div><p class="eyebrow">INTELIGÊNCIA COMERCIAL</p><h1>Diagnósticos & oportunidades</h1><p class="admin-sub">Captação, resultados e o caminho de cada sessão.</p></div><form class="filters" id="period"><label>De<input type="date" name="start" required value="${start}"></label><label>Até<input type="date" name="end" required value="${end}"></label><button class="btn" type="submit">Atualizar</button></form></section><div id="load-status" class="notice" role="status">Carregando dados…</div><div id="overview"></div><section class="panel"><div class="data-head"><div><h2>Contatos e resultados</h2><p class="muted">Formulários concluídos no período selecionado.</p></div><input id="search" type="search" placeholder="Buscar nome, imobiliária, cidade ou telefone" aria-label="Buscar contatos"><button id="export" class="small-btn">↓ Exportar CSV</button></div><div id="contacts"></div><div class="pagination"><span id="page-info"></span><div><button id="prev" class="small-btn">← Anterior</button> <button id="next" class="small-btn">Próxima →</button></div></div></section><p class="privacy-admin">Dados privados da Amorim Soluções Digitais. Evite compartilhar arquivos exportados sem necessidade. Não há registro retroativo anterior à ativação deste painel.</p>`;
+ (document.getElementById('analytics-root')||root).innerHTML=`<section class="panel-heading"><div><p class="eyebrow">INTELIGÊNCIA COMERCIAL</p><h1>Diagnósticos & oportunidades</h1><p class="admin-sub">Captação, resultados e o caminho de cada sessão.</p></div><form class="filters" id="period"><label>De<input type="date" name="start" required value="${start}"></label><label>Até<input type="date" name="end" required value="${end}"></label><button class="btn" type="submit">Atualizar</button></form></section><div id="load-status" class="notice" role="status">Carregando dados…</div><div id="overview"></div><section class="panel"><div class="data-head"><div><h2>Contatos e resultados</h2><p class="muted">Formulários concluídos no período selecionado.</p></div><input id="search" type="search" placeholder="Buscar nome, imobiliária, cidade ou telefone" aria-label="Buscar contatos"><button id="export" class="small-btn">↓ Exportar CSV</button></div><div id="contacts"></div><div class="pagination"><span id="page-info"></span><div><button id="prev" class="small-btn">← Anterior</button> <button id="next" class="small-btn">Próxima →</button></div></div></section><p class="privacy-admin">Dados privados da Amorim Soluções Digitais. Evite compartilhar arquivos exportados sem necessidade. Não há registro retroativo anterior à ativação deste painel.</p>`;
  document.getElementById('period').onsubmit=e=>{e.preventDefault();const f=e.target;start=f.elements.start.value;end=f.elements.end.value;page=0;refresh();};
  let timer;
  document.getElementById('search').oninput=e=>{search=e.target.value;clearTimeout(timer);timer=setTimeout(()=>{page=0;loadContacts().catch(showError)},350);};
@@ -34,7 +36,11 @@ function skeleton(){
 function showError(err){const box=document.getElementById('load-status');if(box){box.hidden=false;box.textContent=errorMessage(err);box.className='notice inline-error';}}
 async function showDashboard(){
  const initial=await api('metrics');
+ root.innerHTML=`<nav class="admin-tabs" aria-label="Áreas do painel"><button id="tab-crm" class="active" aria-selected="true">CRM comercial</button><button id="tab-analytics" aria-selected="false">Métricas do diagnóstico</button></nav><div id="crm-root"></div><div id="analytics-root" hidden></div>`;
  skeleton();metrics=initial;renderMetrics(initial);await loadContacts();
+ disposeCrm=mountCRM(document.getElementById('crm-root'),()=>accessKey);
+ const activate=crm=>{document.getElementById('crm-root').hidden=!crm;document.getElementById('analytics-root').hidden=crm;document.getElementById('tab-crm').classList.toggle('active',crm);document.getElementById('tab-analytics').classList.toggle('active',!crm);document.getElementById('tab-crm').setAttribute('aria-selected',String(crm));document.getElementById('tab-analytics').setAttribute('aria-selected',String(!crm));};
+ document.getElementById('tab-crm').onclick=()=>activate(true);document.getElementById('tab-analytics').onclick=()=>activate(false);
  document.getElementById('load-status').textContent='Dados atualizados em '+date(new Date())+'. Horários de Brasília.';
 }
 async function refresh(){
@@ -64,7 +70,7 @@ async function exportCsv(){const button=document.getElementById('export');button
  const csv=[header,...all.map(r=>{const p=r.payload,l=p.lead;return[date(r.created_at),l.name,l.business,l.city,l.phone,l.email,l.contact_consent?'Sim':'Não',p.total,...p.scores,p.source?.source,p.source?.campaign,...questionList.map((q,i)=>Array.isArray(p.answers[i])?p.answers[i].map(k=>q.o[k]).join('; '):q.o[p.answers[i]])]})].map(line=>line.map(csvCell).join(';')).join('\r\n');
  const url=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=`diagnosticos-${start}-${end}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }catch(err){showError(err)}finally{button.disabled=false;button.textContent='↓ Exportar CSV';}}
-signout.onclick=()=>{accessKey='';try{sessionStorage.removeItem('amorim.admin.access')}catch{}rows=[];metrics=null;document.getElementById('lead-detail').close();document.getElementById('detail-content').replaceChildren();privateAccess('Acesso encerrado. Abra novamente seu link privado quando quiser consultar o painel.');};
+signout.onclick=()=>{disposeCrm();accessKey='';try{sessionStorage.removeItem('amorim.admin.access')}catch{}rows=[];metrics=null;document.getElementById('lead-detail').close();document.getElementById('detail-content').replaceChildren();privateAccess('Acesso encerrado. Abra novamente seu link privado quando quiser consultar o painel.');};
 document.getElementById('close-detail').onclick=()=>document.getElementById('lead-detail').close();
 try{
  const fromLink=new URLSearchParams(location.hash.slice(1)).get('access');
