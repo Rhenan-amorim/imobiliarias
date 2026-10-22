@@ -1,31 +1,25 @@
-import {createAuthClient} from '@neondatabase/auth';
 import {csvCell,percent} from './metrics.js';
 const root=document.getElementById('dashboard'),signout=document.getElementById('signout');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const adminEmail='rhenanamorim230@gmail.com';
 const names=['Leads qualificados','Site, Google e IAs','Automações e atendimento'];
 const questionList=window.AmorimQuestions;
 const fmt=n=>Number(n||0).toLocaleString('pt-BR');
 const date=s=>new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}).format(new Date(s));
 const day=d=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
-let auth,rows=[],page=0,hasMore=false,search='',metrics=null,loading=false;
+let accessKey='',rows=[],page=0,hasMore=false,search='',metrics=null,loading=false;
 const today=day(new Date());
 let start=day(new Date(Date.now()-29*86400000)),end=today;
 function ranges(){return{start:new Date(start+'T00:00:00-03:00').toISOString(),end:new Date(Date.parse(end+'T00:00:00-03:00')+86400000).toISOString()};}
 function errorMessage(e){return e?.message||'Não foi possível concluir. Tente novamente.';}
 async function api(action,extra={}){
- const {data,error}=await auth.token();
- if(error||!data?.token)throw Error('Sessão encerrada. Entre novamente.');
+ if(!accessKey)throw Error('Abra o painel pelo seu link privado.');
  const params=new URLSearchParams({...ranges(),action,...extra});
- const response=await fetch('/api/dashboard?'+params,{headers:{Authorization:'Bearer '+data.token},cache:'no-store'});
+ const response=await fetch('/api/dashboard?'+params,{headers:{Authorization:'Bearer '+accessKey},cache:'no-store'});
  const body=await response.json();if(!response.ok)throw Error(body.error||'Não foi possível carregar os dados.');return body;
 }
-function login(message=''){
+function privateAccess(message='Abra o link privado completo que recebeu para acessar seu painel.'){
  signout.hidden=true;
- root.innerHTML=`<section class="login"><p class="eyebrow">ACESSO RESTRITO</p><h1>Seu painel de oportunidades.</h1><p>Entre com o código enviado ao e-mail autorizado. Não é necessário criar uma senha.</p><form id="login-form"><label>E-mail do administrador<input type="email" name="email" value="${adminEmail}" readonly autocomplete="email"></label><button class="btn" type="submit">Receber código de acesso →</button></form><form id="verify-form" hidden><label style="display:block;margin-top:22px">Código recebido por e-mail<input name="otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" minlength="6" maxlength="8" required placeholder="Digite o código"></label><button class="btn" type="submit">Entrar no painel →</button></form><p id="auth-status" role="status">${esc(message)}</p><p class="privacy-admin">Somente o e-mail autorizado pode consultar contatos e resultados. Se o código não chegar, confira também a pasta de spam.</p><a class="back" href="/">← Voltar à landing page</a></section>`;
- const status=document.getElementById('auth-status');
- document.getElementById('login-form').onsubmit=async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;status.textContent='Enviando código…';try{const {error}=await auth.emailOtp.sendVerificationOtp({email:adminEmail,type:'sign-in'});if(error)throw error;document.getElementById('verify-form').hidden=false;document.querySelector('[name=otp]').focus();status.textContent='Código enviado. Digite-o abaixo para entrar.';}catch(err){status.textContent=errorMessage(err);}finally{b.disabled=false;}};
- document.getElementById('verify-form').onsubmit=async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;status.textContent='Verificando…';try{const {error}=await auth.signIn.emailOtp({email:adminEmail,otp:e.target.elements.otp.value.trim()});if(error)throw error;await showDashboard();}catch(err){status.textContent=errorMessage(err);b.disabled=false;}};
+ root.innerHTML=`<section class="login"><p class="eyebrow">ACESSO PRIVADO</p><h1>Seu painel de oportunidades.</h1><p>${esc(message)}</p><p>Este painel é acessado por um link exclusivo, sem senha ou código por e-mail.</p><a class="back" href="/">← Voltar à landing page</a></section>`;
 }
 function skeleton(){
  signout.hidden=false;
@@ -39,9 +33,9 @@ function skeleton(){
 }
 function showError(err){const box=document.getElementById('load-status');if(box){box.hidden=false;box.textContent=errorMessage(err);box.className='notice inline-error';}}
 async function showDashboard(){
- const {data,error}=await auth.getSession();
- if(error||!data?.user||data.user.email?.toLowerCase()!==adminEmail){await auth.signOut();login('Acesso permitido somente ao e-mail autorizado.');return;}
- skeleton();await refresh();
+ const initial=await api('metrics');
+ skeleton();metrics=initial;renderMetrics(initial);await loadContacts();
+ document.getElementById('load-status').textContent='Dados atualizados em '+date(new Date())+'. Horários de Brasília.';
 }
 async function refresh(){
  if(loading)return;loading=true;const status=document.getElementById('load-status');status.hidden=false;status.textContent='Atualizando dados…';status.className='notice';
@@ -70,6 +64,11 @@ async function exportCsv(){const button=document.getElementById('export');button
  const csv=[header,...all.map(r=>{const p=r.payload,l=p.lead;return[date(r.created_at),l.name,l.business,l.city,l.phone,l.email,l.contact_consent?'Sim':'Não',p.total,...p.scores,p.source?.source,p.source?.campaign,...questionList.map((q,i)=>Array.isArray(p.answers[i])?p.answers[i].map(k=>q.o[k]).join('; '):q.o[p.answers[i]])]})].map(line=>line.map(csvCell).join(';')).join('\r\n');
  const url=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=`diagnosticos-${start}-${end}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }catch(err){showError(err)}finally{button.disabled=false;button.textContent='↓ Exportar CSV';}}
-signout.onclick=async()=>{try{await auth.signOut();}finally{rows=[];metrics=null;login('Você saiu do painel.');}};
+signout.onclick=()=>{accessKey='';try{sessionStorage.removeItem('amorim.admin.access')}catch{}rows=[];metrics=null;document.getElementById('lead-detail').close();document.getElementById('detail-content').replaceChildren();privateAccess('Acesso encerrado. Abra novamente seu link privado quando quiser consultar o painel.');};
 document.getElementById('close-detail').onclick=()=>document.getElementById('lead-detail').close();
-try{const response=await fetch('/api/config',{cache:'no-store'});const config=await response.json();if(!config.authUrl?.startsWith('https://'))throw Error('A configuração de acesso ainda não está disponível.');auth=createAuthClient(config.authUrl);const {data}=await auth.getSession();if(data?.user)await showDashboard();else login();}catch(err){root.innerHTML=`<section class="login"><h1>Painel indisponível</h1><p>${esc(errorMessage(err))}</p><button class="btn" id="retry">Tentar novamente</button></section>`;document.getElementById('retry').onclick=()=>location.reload();}
+try{
+ const fromLink=new URLSearchParams(location.hash.slice(1)).get('access');
+ if(fromLink){accessKey=fromLink;try{sessionStorage.setItem('amorim.admin.access',accessKey)}catch{}history.replaceState(null,'',location.pathname+location.search);}
+ else{try{accessKey=sessionStorage.getItem('amorim.admin.access')||''}catch{}}
+ if(accessKey)await showDashboard();else privateAccess();
+}catch(err){accessKey='';try{sessionStorage.removeItem('amorim.admin.access')}catch{}privateAccess('Não foi possível abrir o painel: '+errorMessage(err));}

@@ -6,12 +6,13 @@ Painel privado: https://amorim-diagnostico-imobiliarias.vercel.app/admin/
 ## Estrutura
 
 - dist/: landing page e recursos estáticos.
-- src/dashboard.js: painel, login por código de e-mail e exportação CSV.
+- src/dashboard.js: painel, acesso por link privado e exportação CSV.
 - api/collect.js: validação, cálculo da nota no servidor e coleta de eventos.
-- api/dashboard.js: consultas autorizadas por JWT do Neon Auth.
+- api/dashboard.js: consultas autorizadas pela chave do link privado.
 - database/schema.sql: esquema inicial já aplicado no novo banco Neon. Não executar novamente sobre o banco criado.
 
-Banco e autenticação: Neon, plano Free, provisionado pela Vercel Marketplace. Credenciais de banco permanecem no servidor. A API exige JWT EdDSA válido, emissor e audiência do Neon configurado e email verificado igual a rhenanamorim230@gmail.com. As tabelas têm RLS e nenhuma permissão pública. Um JWT já emitido pode continuar válido até expirar, mesmo depois da saída no navegador.
+Banco: Neon, plano Free, provisionado pela Vercel Marketplace. Credenciais de banco permanecem no servidor. A API exige uma chave aleatória de 256 bits. Apenas o hash SHA-256 é configurado em ADMIN_LINK_HASH na Vercel. A chave é recebida no fragmento do link, removida da barra de endereço e guardada no sessionStorage da aba. Não entra em query strings, código publicado ou repositório. O painel usa Referrer-Policy no-referrer. Quem possuir o link pode acessar todos os contatos; para revogar o acesso, troque ADMIN_LINK_HASH e gere outro link. As tabelas têm RLS e nenhuma permissão pública. Não há login por email.
+
 
 ## Métricas
 
@@ -31,5 +32,3 @@ npm test
 node --env-file=.env.local scripts/dev.mjs
 
 Prévia: http://localhost:4174. Variáveis locais vêm de vercel env pull .env.local e são ignoradas pelo Git. Nunca compartilhar esse arquivo. A branch main está conectada à Vercel; o build gera dist/dashboard.js, publica dist e as APIs de api/.
-
-O Neon Auth usa inicialmente sua entrega compartilhada de e-mail. Para operação com controle de entregabilidade e remetente, configurar SMTP próprio conforme a documentação Neon. Não há envio de email comercial automatizado.
