@@ -16,23 +16,23 @@ test('commercial actions preserve later stages and block closed opportunities',(
  assert.equal(actionStage('meeting','first'),'meeting');
  assert.throws(()=>actionStage('won','first'));
 });
-test('messages include grounded context, objections and tracked diagnostic',()=>{
+test('messages include contact, region and tracked diagnostic',()=>{
  const m=makeMessages({id:'test-id',name:'Maria Silva',business:'Imobiliária Teste',city:'Niterói',focus:'site',response_type:'price'});
  assert.match(m.first,/Maria/);assert.match(m.first,/Niterói/);
- assert.match(m.second,/investimento depende/);assert.match(m.second,/crm_lead=test-id/);
+ assert.match(m.second,/Aqui está o diagnóstico para a Imobiliária Teste:/);assert.match(m.second,/crm_lead=test-id/);
  const u=new URL(waLink('21971146102',m.second));
  assert.equal(u.pathname,'/5521971146102');assert.equal(u.searchParams.get('text'),m.second);
 });
-test('outreach asks about ChatGPT visibility and offers the diagnostic without inventing a search',()=>{
+test('outreach follows the approved copy and keeps the diagnostic delivery concise',()=>{
  const messages=makeMessages({id:'lead-example',name:'Imobiliária Exemplo',source:'Importação',city:'São Gonçalo'});
- assert.match(messages.first,/ChatGPT.*São Gonçalo.*Imobiliária Exemplo aparece\?/);
+ assert.match(messages.first,/testes com imobiliárias de São Gonçalo, perguntando ao ChatGPT/);
  assert.match(messages.first,/Posso te mandar\?/);
- assert.doesNotMatch(messages.first,/não apareceu|fazendo.*testes|Oi, Imobiliária/);
+ assert.match(messages.first,/e a sua não apareceu/);
  assert.match(messages.second,/Aqui está o diagnóstico para a Imobiliária Exemplo:/);
- assert.match(messages.second,/resultado sai na hora/);
+ assert.ok(messages.second.endsWith('Leva cerca de 3 minutos e o resultado sai na hora.'));
  assert.match(messages.second,/crm_lead=lead-example/);
  const fallback=makeMessages({name:'Maria'});
- assert.match(fallback.first,/na sua região/);
+ assert.match(fallback.first,/de sua região/);
  assert.doesNotMatch(fallback.first,/undefined|null/);
 });
 test('bulk parser handles Excel paste, BOM, quoted delimiters and line breaks',()=>{
