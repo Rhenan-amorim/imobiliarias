@@ -30,3 +30,22 @@ test('bulk parser handles Excel paste, BOM, quoted delimiters and line breaks',(
  assert.throws(()=>parseTable('nome;telefone\n"aberto;123'));
  assert.throws(()=>parseTable('nome;cidade\nA;B'));
 });
+test('imports the original Nome/Telefone/Bairro/Site format without losing the neighborhood',()=>{
+ const [row]=parseTable('Nome,Telefone,Bairro,Site\nImobiliária Exemplo,+55 21 90000-0000,Ipanema,https://example.com');
+ assert.equal(row.lead.city,'Ipanema');
+ assert.equal(validateLead(row.lead).city,'Ipanema');
+ assert.equal(row.lead.website,'https://example.com');
+});
+test('combines city and neighborhood, falls back from empty columns and avoids duplicate regions',()=>{
+ const cases=[
+  ['Cidade;Bairro','Rio de Janeiro;Ipanema','Rio de Janeiro · Ipanema'],
+  ['Cidade;Bairro',';Ipanema','Ipanema'],
+  ['Cidade;Região','Niterói;Niterói','Niterói'],
+  ['Cidade / Região','Leblon','Leblon'],
+  ['Município;Bairro','Rio de Janeiro;Leblon','Rio de Janeiro · Leblon'],
+  ['address/city;address/neighborhood','Rio de Janeiro;Copacabana','Rio de Janeiro · Copacabana'],
+  ['City;Neighborhood',';Ipanema','Ipanema'],
+  ['Cidade;City;Bairro',';Rio de Janeiro;Leblon','Rio de Janeiro · Leblon'],
+ ];
+ for(const [headers,values,expected]of cases){assert.equal(parseTable(`Nome;Telefone;${headers}\nExemplo;21900000000;${values}`)[0].lead.city,expected,headers);}
+});
