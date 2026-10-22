@@ -16,6 +16,28 @@ test('commercial actions preserve later stages and block closed opportunities',(
  assert.equal(actionStage('meeting','first'),'meeting');
  assert.throws(()=>actionStage('won','first'));
 });
+test('lead profile persists and existing leads default to agencies',()=>{
+ const base={name:'Amorim',phone:'21900000000'};
+ assert.equal(validateLead(base).lead_type,'agency');
+ const broker=validateLead({...base,lead_type:'broker'});
+ assert.equal(validateLead(JSON.parse(JSON.stringify(broker))).lead_type,'broker');
+ assert.throws(()=>validateLead({...base,lead_type:'unknown'}));
+});
+test('broker messages address the professional across the entire sales flow',()=>{
+ const messages=makeMessages({lead_type:'broker',name:'Amorim Silva',business:'Empresa Associada',city:'São Gonçalo',id:'broker-test',focus:'site',diagnostic:{scores:[20,30,40]}});
+ assert.match(messages.first,/Oi, Amorim!/);
+ assert.match(messages.first,/testes com corretores de São Gonçalo/);
+ assert.match(messages.first,/qual corretor de imóveis procurar para comprar um apartamento ou uma casa, e você não apareceu/);
+ assert.match(messages.second,/Aqui está o seu diagnóstico, Amorim:/);
+ assert.match(messages.second,/crm_lead=broker-test/);
+ assert.ok(messages.second.endsWith('Leva cerca de 3 minutos e o resultado sai na hora.'));
+ assert.match(messages.meeting,/sua captação e seu atendimento/);
+ assert.match(messages.followup,/seu trabalho como corretor/);
+ assert.match(messages.proposal,/proposta que te enviei/);
+ for(const message of Object.values(messages))assert.doesNotMatch(message,/imobiliária|Empresa Associada/);
+ const agency=makeMessages({name:'Empresa',city:'São Gonçalo'});
+ assert.match(agency.first,/testes com imobiliárias de São Gonçalo/);
+});
 test('messages include contact, region and tracked diagnostic',()=>{
  const m=makeMessages({id:'test-id',name:'Maria Silva',business:'Imobiliária Teste',city:'Niterói',focus:'site',response_type:'price'});
  assert.match(m.first,/Maria/);assert.match(m.first,/Niterói/);

@@ -3,7 +3,7 @@ import {db} from '../lib/db.js';
 import {requireAdmin} from '../lib/admin-auth.js';
 import {validateLead,makeMessages,ACTIONS,actionStage,waLink,normalizePhone} from '../lib/crm-domain.js';
 const uuid=/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i;
-const merge=r=>({...r.data,id:r.id,phone:r.phone,stage:r.stage,messages:r.messages,diagnostic:r.diagnostic,created_at:r.created_at,updated_at:r.updated_at,stage_entered_at:r.stage_entered_at,last_contact_at:r.last_contact_at,replied_at:r.replied_at,next_due:r.next_due,version:r.version});
+const merge=r=>({...r.data,lead_type:r.data.lead_type||'agency',id:r.id,phone:r.phone,stage:r.stage,messages:r.messages,diagnostic:r.diagnostic,created_at:r.created_at,updated_at:r.updated_at,stage_entered_at:r.stage_entered_at,last_contact_at:r.last_contact_at,replied_at:r.replied_at,next_due:r.next_due,version:r.version});
 async function insertLeads(items,source='Cadastro'){
  const data=items.map(input=>{const d=validateLead(input),id=randomUUID();return{id,phone:d.phone,data:d,stage:d.stage,messages:makeMessages({...d,id}),next_due:d.next_due};});
  const [result]=await db()`with inserted as (
