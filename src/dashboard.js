@@ -1,5 +1,6 @@
 import {mountCRM} from './crm.js';
 import {csvCell,percent} from './metrics.js';
+import {adminFetch} from './admin-client.js';
 const root=document.getElementById('dashboard'),signout=document.getElementById('signout');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const names=['Leads qualificados','Site, Google e IAs','Automações e atendimento'];
@@ -8,20 +9,29 @@ const fmt=n=>Number(n||0).toLocaleString('pt-BR');
 const date=s=>new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'}).format(new Date(s));
 const day=d=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
 let disposeCrm=()=>{};
-let accessKey='',rows=[],page=0,hasMore=false,search='',metrics=null,loading=false;
+let rows=[],page=0,hasMore=false,search='',metrics=null,loading=false;
 const today=day(new Date());
 let start=day(new Date(Date.now()-29*86400000)),end=today;
 function ranges(){return{start:new Date(start+'T00:00:00-03:00').toISOString(),end:new Date(Date.parse(end+'T00:00:00-03:00')+86400000).toISOString()};}
 function errorMessage(e){return e?.message||'Não foi possível concluir. Tente novamente.';}
 async function api(action,extra={}){
- if(!accessKey)throw Error('Abra o painel pelo seu link privado.');
  const params=new URLSearchParams({...ranges(),action,...extra});
- const response=await fetch('/api/dashboard?'+params,{headers:{Authorization:'Bearer '+accessKey},cache:'no-store'});
- const body=await response.json();if(!response.ok)throw Error(body.error||'Não foi possível carregar os dados.');return body;
+ return adminFetch('/api/dashboard?'+params);
 }
-function privateAccess(message='Abra o link privado completo que recebeu para acessar seu painel.'){
+function privateAccess(message='Entre com sua senha para acessar os leads e as métricas.'){
  signout.hidden=true;
- root.innerHTML=`<section class="login"><p class="eyebrow">ACESSO PRIVADO</p><h1>Seu painel de oportunidades.</h1><p>${esc(message)}</p><p>Este painel é acessado por um link exclusivo, sem senha ou código por e-mail.</p><a class="back" href="/">← Voltar à landing page</a></section>`;
+ root.innerHTML=`<section class="login"><p class="eyebrow">ACESSO PRIVADO</p><h1>Seu painel de oportunidades.</h1><p>${esc(message)}</p><form id="admin-login"><label for="admin-password">Senha do painel</label><div class="password-field"><input id="admin-password" name="password" type="password" autocomplete="current-password" maxlength="256" required><button type="button" id="toggle-password" aria-label="Mostrar senha" aria-pressed="false">Mostrar</button></div><p id="login-status" role="status" aria-live="polite"></p><button class="btn" type="submit">Entrar no painel</button></form><p class="login-note">Você pode acessar este endereço pelo computador ou celular.</p><a class="back" href="/">← Voltar à landing page</a></section>`;
+ const form=document.getElementById('admin-login'),input=document.getElementById('admin-password'),toggle=document.getElementById('toggle-password'),status=document.getElementById('login-status'),submit=form.querySelector('[type=submit]');
+ toggle.onclick=()=>{const visible=input.type==='password';input.type=visible?'text':'password';toggle.textContent=visible?'Ocultar':'Mostrar';toggle.setAttribute('aria-label',visible?'Ocultar senha':'Mostrar senha');toggle.setAttribute('aria-pressed',String(visible));};
+ form.onsubmit=async e=>{
+  e.preventDefault();submit.disabled=true;submit.textContent='Entrando…';status.textContent='';
+  try{
+   const response=await fetch('/api/admin-auth',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-Amorim-Request':'1'},body:JSON.stringify({action:'login',password:input.value})});
+   const data=await response.json();if(!response.ok)throw Error(data.error||'Não foi possível entrar.');
+   input.value='';await showDashboard();
+  }catch(err){if(form.isConnected){status.className='inline-error';status.textContent=errorMessage(err);input.focus();}else privateAccess(errorMessage(err));}
+  finally{submit.disabled=false;submit.textContent='Entrar no painel';}
+ };
 }
 function skeleton(){
  signout.hidden=false;
@@ -38,7 +48,7 @@ async function showDashboard(){
  const initial=await api('metrics');
  root.innerHTML=`<nav class="admin-tabs" aria-label="Áreas do painel"><button id="tab-crm" class="active" aria-selected="true">CRM comercial</button><button id="tab-analytics" aria-selected="false">Métricas do diagnóstico</button></nav><div id="crm-root"></div><div id="analytics-root" hidden></div>`;
  skeleton();metrics=initial;renderMetrics(initial);await loadContacts();
- disposeCrm=mountCRM(document.getElementById('crm-root'),()=>accessKey);
+ disposeCrm=mountCRM(document.getElementById('crm-root'));
  const activate=crm=>{document.getElementById('crm-root').hidden=!crm;document.getElementById('analytics-root').hidden=crm;document.getElementById('tab-crm').classList.toggle('active',crm);document.getElementById('tab-analytics').classList.toggle('active',!crm);document.getElementById('tab-crm').setAttribute('aria-selected',String(crm));document.getElementById('tab-analytics').setAttribute('aria-selected',String(!crm));};
  document.getElementById('tab-crm').onclick=()=>activate(true);document.getElementById('tab-analytics').onclick=()=>activate(false);
  document.getElementById('load-status').textContent='Dados atualizados em '+date(new Date())+'. Horários de Brasília.';
@@ -70,11 +80,13 @@ async function exportCsv(){const button=document.getElementById('export');button
  const csv=[header,...all.map(r=>{const p=r.payload,l=p.lead;return[date(r.created_at),l.name,l.business,l.city,l.phone,l.email,l.contact_consent?'Sim':'Não',p.total,...p.scores,p.source?.source,p.source?.campaign,...questionList.map((q,i)=>Array.isArray(p.answers[i])?p.answers[i].map(k=>q.o[k]).join('; '):q.o[p.answers[i]])]})].map(line=>line.map(csvCell).join(';')).join('\r\n');
  const url=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=`diagnosticos-${start}-${end}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }catch(err){showError(err)}finally{button.disabled=false;button.textContent='↓ Exportar CSV';}}
-signout.onclick=()=>{disposeCrm();accessKey='';try{sessionStorage.removeItem('amorim.admin.access')}catch{}rows=[];metrics=null;document.getElementById('lead-detail').close();document.getElementById('detail-content').replaceChildren();privateAccess('Acesso encerrado. Abra novamente seu link privado quando quiser consultar o painel.');};
+function clearDashboard(message){disposeCrm();disposeCrm=()=>{};rows=[];metrics=null;page=0;search='';document.getElementById('lead-detail').close();document.getElementById('detail-content').replaceChildren();privateAccess(message);}
+window.addEventListener('admin-session-expired',()=>{if(!document.getElementById('admin-login'))clearDashboard('Seu acesso expirou. Entre novamente com sua senha.');});
+signout.onclick=async()=>{signout.disabled=true;try{await adminFetch('/api/admin-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout'})});clearDashboard('Você saiu do painel. Use sua senha para entrar novamente.');}catch(err){showError(err)}finally{signout.disabled=false;}};
 document.getElementById('close-detail').onclick=()=>document.getElementById('lead-detail').close();
 try{
- const fromLink=new URLSearchParams(location.hash.slice(1)).get('access');
- if(fromLink){accessKey=fromLink;try{sessionStorage.setItem('amorim.admin.access',accessKey)}catch{}history.replaceState(null,'',location.pathname+location.search);}
- else{try{accessKey=sessionStorage.getItem('amorim.admin.access')||''}catch{}}
- if(accessKey)await showDashboard();else privateAccess();
-}catch(err){accessKey='';try{sessionStorage.removeItem('amorim.admin.access')}catch{}privateAccess('Não foi possível abrir o painel: '+errorMessage(err));}
+ if(location.hash)history.replaceState(null,'',location.pathname+location.search);
+ try{sessionStorage.removeItem('amorim.admin.access')}catch{}
+ const response=await fetch('/api/admin-auth',{credentials:'same-origin',cache:'no-store'});
+ if(response.ok)await showDashboard();else if(response.status===401)privateAccess();else privateAccess('Não foi possível verificar seu acesso. Tente novamente.');
+}catch(err){privateAccess('Não foi possível abrir o painel: '+errorMessage(err));}

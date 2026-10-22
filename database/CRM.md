@@ -1,6 +1,8 @@
 # CRM comercial
 
-O painel privado abre o CRM e mantém as métricas em outra aba. A chave de acesso existente continua obrigatória em todas as operações da API. Não colocar a chave em arquivos públicos.
+O painel privado abre em `/admin/` com uma senha, validada pelo servidor. Todas as APIs do CRM e das métricas exigem uma sessão válida. A antiga chave no link não autoriza mais o acesso.
+
+Configuração: `ADMIN_PASSWORD_HASH` contém um hash scrypt criado por `hashPassword` em `lib/admin-auth.js`; nunca incluir a senha em arquivos públicos ou no Git. Aplicar `database/admin-auth.sql` antes do deploy. As sessões duram até sete dias, usam cookie HttpOnly, Secure em produção e SameSite=Strict, e são revogadas pelo botão Sair. Alterar o hash da senha invalida todas as sessões anteriores. Dez tentativas por IP em quinze minutos; somente o hash do IP é armazenado. Senhas com acentos são normalizadas em NFC.
 
 ## Uso
 
