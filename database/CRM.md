@@ -34,3 +34,11 @@ Importar com perfil Gestor imobiliário. Colunas reconhecidas: Nome → name; Ca
 A ficha permite abrir o perfil e copiar as mensagens para envio manual no LinkedIn. Abrir o perfil ou copiar texto não muda a etapa. O WhatsApp fica desabilitado até cadastrar um número. As etapas podem ser registradas manualmente na ficha.
 
 Migração de instalações existentes: `node --env-file=.env.local scripts/crm-schema.mjs crm-linkedin.sql`. O telefone passa a aceitar NULL e a URL do LinkedIn ganha índice único; ao menos um dos dois contatos é obrigatório no banco.
+
+## Botão de mensagem no LinkedIn
+
+Enviar pelo LinkedIn copia o texto salvo/editado e solicita a abertura da conversa. Para identificadores opacos de perfil, monta uma URL de composição com destinatário e texto; para URLs públicas com nome, abre o perfil para que o usuário clique em Mensagem. A rota de composição é uma tentativa sem garantia pública de preenchimento: se o LinkedIn ignorar o texto, cole a cópia. Conexão, InMail, login e demais permissões são controlados pelo LinkedIn. Não há envio automático.
+
+A preparação da abordagem fica no histórico como `linkedin_first`; a segunda como `linkedin_second`. Assim como o WhatsApp, essas ações atualizam etapa e retorno, sem confirmar envio ou entrega. Copiar o texto pelo botão separado não altera a etapa. Migração: `node --env-file=.env.local scripts/crm-schema.mjs crm-linkedin-messaging.sql`.
+
+Verificação: fluxo interno e parâmetros de composição testados; o navegador disponível estava sem sessão no LinkedIn, portanto a composição autenticada não foi confirmada.

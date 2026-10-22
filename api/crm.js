@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {db} from '../lib/db.js';
 import {requireAdmin} from '../lib/admin-auth.js';
-import {validateLead,makeMessages,ACTIONS,actionStage,waLink,normalizePhone} from '../lib/crm-domain.js';
+import {validateLead,makeMessages,ACTIONS,actionStage,waLink,normalizePhone,linkedInMessageLink} from '../lib/crm-domain.js';
 const uuid=/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i;
 const merge=r=>({...r.data,lead_type:r.data.lead_type||'agency',id:r.id,phone:r.phone,linkedin:r.linkedin??r.data.linkedin??null,stage:r.stage,messages:r.messages,diagnostic:r.diagnostic,created_at:r.created_at,updated_at:r.updated_at,stage_entered_at:r.stage_entered_at,last_contact_at:r.last_contact_at,replied_at:r.replied_at,next_due:r.next_due,version:r.version});
 async function insertLeads(items,source='Cadastro'){
@@ -51,21 +51,25 @@ export default async function handler(req,res){
   const [row]=await sql`select * from public.crm_leads where id=${b.id}::uuid`;
   if(!row)return res.status(404).json({error:'Lead não encontrado.'});
   const lead=merge(row),eventId=uuid.test(String(b.event_id))?b.event_id:randomUUID();
-  let patch,kind,description,message=null,wa=null;
+  let patch,kind,description,message=null,wa=null,channel=null,openMode=null;
   if(b.action==='save'){
    const data=validateLead({...lead,...b.lead});
    const messages=b.regenerate?makeMessages({...data,id:lead.id,diagnostic:lead.diagnostic}):Object.fromEntries(Object.keys(ACTIONS).map(k=>[k,String(b.messages?.[k]??lead.messages[k]??'').slice(0,6000)]));
    patch={data,phone:data.phone,linkedin:data.linkedin,stage:data.stage,messages,next_due:['won','lost'].includes(data.stage)?null:data.next_due};kind='edited';description=data.stage!==lead.stage?'Etapa alterada manualmente':'Dados e mensagens atualizados';
   }else if(b.action==='message'){
    if(lead.do_not_contact)throw Error('Este lead está marcado como não contatar.');
-   if(!lead.phone)throw Error('Adicione um WhatsApp na ficha para abrir a mensagem. O LinkedIn deste contato está disponível na ficha.');
+   channel=b.channel||'whatsapp';if(!['whatsapp','linkedin'].includes(channel))throw Error('Canal de contato inválido.');
+   if(channel==='whatsapp'&&!lead.phone)throw Error('Adicione um WhatsApp na ficha para abrir a mensagem.');
+   if(channel==='linkedin'&&!lead.linkedin)throw Error('Adicione o perfil do LinkedIn na ficha.');
    const a=ACTIONS[b.type];if(!a)throw Error('Mensagem inválida.');
-   message=String(b.message??lead.messages[b.type]??'').trim().slice(0,6000);if(!message)throw Error('Preencha a mensagem antes de abrir o WhatsApp.');
+   message=String(b.message??lead.messages[b.type]??'').trim().slice(0,6000);if(!message)throw Error('Preencha a mensagem antes de abrir a conversa.');
    const stage=actionStage(lead.stage,b.type);
    const next=new Date(Date.now()+a.days*86400000).toISOString();
-   patch={stage,next_due:next,messages:{...lead.messages,[b.type]:message}};kind='whatsapp_'+b.type;description=a.label;wa=waLink(lead.phone,message);
+   patch={stage,next_due:next,messages:{...lead.messages,[b.type]:message}};kind=channel+'_'+b.type;
+   if(channel==='linkedin'){const target=linkedInMessageLink(lead.linkedin,message);wa=target.url;openMode=target.mode;description=({first:'1ª abordagem preparada para o LinkedIn',second:'Resposta registrada e diagnóstico preparado para o LinkedIn',meeting:'Convite para conversa preparado para o LinkedIn',followup:'Retomada preparada para o LinkedIn',proposal:'Acompanhamento da proposta preparado para o LinkedIn'})[b.type];}
+   else{description=a.label;wa=waLink(lead.phone,message);}
   }else throw Error('Ação inválida.');
   const [r]=await sql`select public.crm_mutate(${lead.id}::uuid,${Number(b.version)}::integer,${eventId}::uuid,${kind},${description},${JSON.stringify(patch)}::jsonb,${message}) as lead`;
-  return res.json({lead:merge(r.lead),url:wa});
+  return res.json({lead:merge(r.lead),url:wa,channel,open_mode:openMode});
  }catch(e){const msg=String(e.message);if(msg.includes('version_conflict'))return res.status(409).json({error:'Este lead foi atualizado em outra aba. Reabra a ficha antes de salvar.'});if(msg.includes('duplicate key'))return res.status(409).json({error:'Este WhatsApp ou perfil do LinkedIn já está cadastrado no CRM.'});if(e.code)return res.status(503).json({error:'Não foi possível salvar no banco. Tente novamente.'});return res.status(400).json({error:msg.slice(0,250)});}
 }

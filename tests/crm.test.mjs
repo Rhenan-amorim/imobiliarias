@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizePhone,normalizeLinkedIn,validateLead,makeMessages,actionStage,waLink} from '../lib/crm-domain.js';
+import {normalizePhone,normalizeLinkedIn,linkedInMessageLink,validateLead,makeMessages,actionStage,waLink} from '../lib/crm-domain.js';
 import {parseTable} from '../src/crm-import.js';
 test('normalizes WhatsApp and rejects malformed leads',()=>{
  assert.equal(normalizePhone('(21) 97114-6102'),'5521971146102');
@@ -40,6 +40,22 @@ test('manager CSV maps every source column and accepts several contacts without 
  assert.equal(rows.length,2);assert.ok(rows.every(r=>r.phone===null));assert.notEqual(rows[0].linkedin,rows[1].linkedin);
  assert.equal(rows[0].name,'Gestor Um');assert.equal(rows[0].job_title,'Gerente comercial');assert.equal(rows[0].business,'Construtora Exemplo');assert.equal(rows[0].city,'São Gonçalo, RJ');
  assert.equal(rows[0].linkedin,'https://www.linkedin.com/in/gestor-um');
+});
+test('manager outreach follows the requested introduction and regional ChatGPT wording',()=>{
+ const first=makeMessages({lead_type:'manager',name:'Fabio Silva',job_title:'Gerente de vendas (Equipe Lima)',business:'Conx Construtora e Incorporadora',city:'Guarulhos, SP'}).first;
+ assert.ok(first.startsWith('Oi, Fabio!\nSou Rhenan, tudo bem?\nVi sua atuação como Gerente de vendas (Equipe Lima) na Conx Construtora e Incorporadora.\n\n'));
+ assert.match(first,/testes com corretores em Guarulhos, SP/);
+ assert.match(first,/qual o melhor corretor da região ou com quem comprar um apartamento e você não apareceu/);
+ assert.ok(first.endsWith('Posso te mandar?'));
+});
+test('best-effort LinkedIn compose preserves message and recipient, with profile fallback for vanity URLs',()=>{
+ const message='Oi, Fábio!\nSou Rhenan, tudo bem?';
+ const target=linkedInMessageLink('https://www.linkedin.com/in/ACwAAExampleProfile/',message),url=new URL(target.url);
+ assert.equal(target.mode,'compose');assert.equal(url.origin,'https://www.linkedin.com');assert.equal(url.pathname,'/messaging/compose/');
+ assert.equal(url.searchParams.get('recipient'),'ACwAAExampleProfile');assert.equal(url.searchParams.get('profileUrn'),'urn:li:fsd_profile:ACwAAExampleProfile');assert.equal(url.searchParams.get('body'),message);
+ const fallback=linkedInMessageLink('https://www.linkedin.com/in/fabio-exemplo',message);
+ assert.deepEqual(fallback,{url:'https://www.linkedin.com/in/fabio-exemplo',mode:'profile'});
+ assert.throws(()=>linkedInMessageLink(null,message));assert.throws(()=>linkedInMessageLink('https://evil.test/in/name',message));
 });
 test('broker messages address the professional across the entire sales flow',()=>{
  const messages=makeMessages({lead_type:'broker',name:'Amorim Silva',business:'Empresa Associada',city:'São Gonçalo',id:'broker-test',focus:'site',diagnostic:{scores:[20,30,40]}});

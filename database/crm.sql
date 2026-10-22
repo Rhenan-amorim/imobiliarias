@@ -50,8 +50,8 @@ begin
  messages=case when p_patch?'messages' then p_patch->'messages' else messages end,
  stage_entered_at=case when target<>old.stage then now() else stage_entered_at end,
  next_due=case when p_patch?'next_due' then (p_patch->>'next_due')::timestamptz else next_due end,
- last_contact_at=case when p_kind like 'whatsapp_%' then now() else last_contact_at end,
- replied_at=case when p_kind='whatsapp_second' then coalesce(replied_at,now()) else replied_at end,
+ last_contact_at=case when p_kind like 'whatsapp_%' or p_kind like 'linkedin_%' then now() else last_contact_at end,
+ replied_at=case when p_kind in ('whatsapp_second','linkedin_second') then coalesce(replied_at,now()) else replied_at end,
  updated_at=now(),version=version+1 where id=p_id returning * into updated;
  insert into public.crm_history(id,lead_id,kind,description,from_stage,to_stage,message)
  values(p_event_id,p_id,p_kind,p_description,old.stage,target,p_message);

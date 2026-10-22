@@ -4,3 +4,5 @@
 }
 
 .linkedin-btn{background:#0a66c2;color:#fff!important;border-color:#0a66c2}.whatsapp-btn:disabled{opacity:.4;cursor:not-allowed}.copy-message{margin:8px 0 0 8px;min-height:38px}.mobile-lead-actions a{display:flex;align-items:center;justify-content:center;text-align:center;min-height:48px;white-space:normal;line-height:1.4;box-sizing:border-box}.crm-import-dialog a{overflow-wrap:anywhere}@media(max-width:700px){.copy-message{width:100%;margin:8px 0 0;min-height:44px}.mobile-lead-title span{overflow-wrap:anywhere}.crm-lead-meta .linkedin-btn{min-height:44px;display:flex;align-items:center;justify-content:center}}
+
+.linkedin-send{margin:8px 0 0 8px;min-height:38px}.linkedin-btn:disabled{opacity:.4;cursor:not-allowed}@media(max-width:700px){.message-block .linkedin-send{width:100%;min-height:50px;font-size:14px;margin:8px 0 0}}
