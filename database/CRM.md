@@ -37,8 +37,8 @@ Migração de instalações existentes: `node --env-file=.env.local scripts/crm-
 
 ## Botão de mensagem no LinkedIn
 
-Enviar pelo LinkedIn copia o texto salvo/editado e solicita a abertura da conversa. Para identificadores opacos de perfil, monta uma URL de composição com destinatário e texto; para URLs públicas com nome, abre o perfil para que o usuário clique em Mensagem. A rota de composição é uma tentativa sem garantia pública de preenchimento: se o LinkedIn ignorar o texto, cole a cópia. Conexão, InMail, login e demais permissões são controlados pelo LinkedIn. Não há envio automático.
+Copiar e abrir LinkedIn copia a mensagem selecionada (incluindo as edições feitas na ficha) e abre diretamente o perfil do contato. No LinkedIn, o usuário clica em Mensagem e cola o texto. O mesmo fluxo vale para a primeira abordagem, o diagnóstico e os acompanhamentos. A mensagem não vai na URL. Não há envio automático. Se a cópia for bloqueada, o perfil não é aberto e o CRM não avança a etapa; a interface pede a cópia manual.
 
 A preparação da abordagem fica no histórico como `linkedin_first`; a segunda como `linkedin_second`. Assim como o WhatsApp, essas ações atualizam etapa e retorno, sem confirmar envio ou entrega. Copiar o texto pelo botão separado não altera a etapa. Migração: `node --env-file=.env.local scripts/crm-schema.mjs crm-linkedin-messaging.sql`.
 
-Verificação: fluxo interno e parâmetros de composição testados; o navegador disponível estava sem sessão no LinkedIn, portanto a composição autenticada não foi confirmada.
+A abertura do perfil usa a URL do próprio cadastro, sem rota de composição de conversa. A cópia é feita antes de abrir a nova aba.

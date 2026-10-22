@@ -66,7 +66,7 @@ export default async function handler(req,res){
    const stage=actionStage(lead.stage,b.type);
    const next=new Date(Date.now()+a.days*86400000).toISOString();
    patch={stage,next_due:next,messages:{...lead.messages,[b.type]:message}};kind=channel+'_'+b.type;
-   if(channel==='linkedin'){const target=linkedInMessageLink(lead.linkedin,message);wa=target.url;openMode=target.mode;description=({first:'1ª abordagem preparada para o LinkedIn',second:'Resposta registrada e diagnóstico preparado para o LinkedIn',meeting:'Convite para conversa preparado para o LinkedIn',followup:'Retomada preparada para o LinkedIn',proposal:'Acompanhamento da proposta preparado para o LinkedIn'})[b.type];}
+   if(channel==='linkedin'){const target=linkedInMessageLink(lead.linkedin);wa=target.url;openMode=target.mode;description=({first:'1ª abordagem preparada para o LinkedIn',second:'Resposta registrada e diagnóstico preparado para o LinkedIn',meeting:'Convite para conversa preparado para o LinkedIn',followup:'Retomada preparada para o LinkedIn',proposal:'Acompanhamento da proposta preparado para o LinkedIn'})[b.type];}
    else{description=a.label;wa=waLink(lead.phone,message);}
   }else throw Error('Ação inválida.');
   const [r]=await sql`select public.crm_mutate(${lead.id}::uuid,${Number(b.version)}::integer,${eventId}::uuid,${kind},${description},${JSON.stringify(patch)}::jsonb,${message}) as lead`;

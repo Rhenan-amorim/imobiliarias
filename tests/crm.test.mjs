@@ -48,11 +48,11 @@ test('manager outreach follows the requested introduction and regional ChatGPT w
  assert.match(first,/qual o melhor corretor da região ou com quem comprar um apartamento e você não apareceu/);
  assert.ok(first.endsWith('Posso te mandar?'));
 });
-test('best-effort LinkedIn compose preserves message and recipient, with profile fallback for vanity URLs',()=>{
+test('LinkedIn message action always opens the exact profile without putting the message in the URL',()=>{
  const message='Oi, Fábio!\nSou Rhenan, tudo bem?';
  const target=linkedInMessageLink('https://www.linkedin.com/in/ACwAAExampleProfile/',message),url=new URL(target.url);
- assert.equal(target.mode,'compose');assert.equal(url.origin,'https://www.linkedin.com');assert.equal(url.pathname,'/messaging/compose/');
- assert.equal(url.searchParams.get('recipient'),'ACwAAExampleProfile');assert.equal(url.searchParams.get('profileUrn'),'urn:li:fsd_profile:ACwAAExampleProfile');assert.equal(url.searchParams.get('body'),message);
+ assert.equal(target.mode,'profile');assert.equal(url.origin,'https://www.linkedin.com');assert.equal(url.pathname,'/in/ACwAAExampleProfile');assert.equal(url.search,'');
+ assert.ok(!target.url.includes(encodeURIComponent(message)));
  const fallback=linkedInMessageLink('https://www.linkedin.com/in/fabio-exemplo',message);
  assert.deepEqual(fallback,{url:'https://www.linkedin.com/in/fabio-exemplo',mode:'profile'});
  assert.throws(()=>linkedInMessageLink(null,message));assert.throws(()=>linkedInMessageLink('https://evil.test/in/name',message));
