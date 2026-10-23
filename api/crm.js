@@ -1,9 +1,9 @@
 import {randomUUID} from 'node:crypto';
 import {db} from '../lib/db.js';
 import {requireAdmin} from '../lib/admin-auth.js';
-import {validateLead,makeMessages,ACTIONS,actionStage,waLink,normalizePhone,linkedInMessageLink} from '../lib/crm-domain.js';
+import {validateLead,makeMessages,ACTIONS,actionStage,waLink,normalizePhone,linkedInMessageLink,phoneStatusPatch,assertWhatsAppAvailable} from '../lib/crm-domain.js';
 const uuid=/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i;
-const merge=r=>({...r.data,lead_type:r.data.lead_type||'agency',id:r.id,phone:r.phone,linkedin:r.linkedin??r.data.linkedin??null,stage:r.stage,messages:r.messages,diagnostic:r.diagnostic,created_at:r.created_at,updated_at:r.updated_at,stage_entered_at:r.stage_entered_at,last_contact_at:r.last_contact_at,replied_at:r.replied_at,next_due:r.next_due,version:r.version});
+const merge=r=>({...r.data,phone_invalid:r.data.phone_invalid===true,lead_type:r.data.lead_type||'agency',id:r.id,phone:r.phone,linkedin:r.linkedin??r.data.linkedin??null,stage:r.stage,messages:r.messages,diagnostic:r.diagnostic,created_at:r.created_at,updated_at:r.updated_at,stage_entered_at:r.stage_entered_at,last_contact_at:r.last_contact_at,replied_at:r.replied_at,next_due:r.next_due,version:r.version});
 async function insertLeads(items,source='Cadastro'){
  const data=items.map(input=>{const d=validateLead(input),id=randomUUID();return{id,phone:d.phone,linkedin:d.linkedin,data:d,stage:d.stage,messages:makeMessages({...d,id}),next_due:d.next_due};});
  const [result]=await db()`with inserted as (
@@ -21,10 +21,10 @@ export default async function handler(req,res){
  try{
   if(req.method==='GET'){
    if(req.query.id){if(!uuid.test(String(req.query.id)))throw Error('Lead inválido.');const [r]=await sql`select * from public.crm_leads where id=${String(req.query.id)}::uuid`;if(!r)return res.status(404).json({error:'Lead não encontrado.'});const history=await sql`select * from public.crm_history where lead_id=${r.id} order by created_at desc limit 200`;return res.json({lead:merge(r),history});}
-   const q=String(req.query.search||'').trim().slice(0,100),pattern='%'+q.replace(/[\\%_]/g,'\\$&')+'%',stage=String(req.query.stage||''),mode=String(req.query.mode||'all');
+   const q=String(req.query.search||'').trim().slice(0,100),pattern='%'+q.replace(/[\\%_]/g,'\\$&')+'%',stage=String(req.query.stage||''),mode=String(req.query.mode||'all'),invalid=req.query.phone_status==='invalid';
    const offset=Math.max(0,Math.min(1000000,Number(req.query.offset)||0));
-   const rows=await sql`select * from public.crm_leads where (${q}='' or data->>'name' ilike ${pattern} or data->>'business' ilike ${pattern} or data->>'city' ilike ${pattern} or data->>'job_title' ilike ${pattern} or linkedin ilike ${pattern} or phone ilike ${pattern}) and (${stage}='' or stage=${stage}) and (${mode}='all' or (${mode}='overdue' and next_due<now() and stage not in ('won','lost')) or (${mode}='today' and (next_due at time zone 'America/Sao_Paulo')::date=(now() at time zone 'America/Sao_Paulo')::date and stage not in ('won','lost')) or (${mode}='open' and stage not in ('won','lost'))) order by case when next_due<now() and stage not in ('won','lost') then 0 else 1 end,updated_at desc,id limit 101 offset ${offset}`;
-   const summary=await sql`select stage,count(*)::int as total,count(*) filter(where next_due<now() and stage not in ('won','lost'))::int as overdue,coalesce(sum((data->>'deal_value')::numeric),0) as value from public.crm_leads group by stage`;
+   const rows=await sql`select * from public.crm_leads where (coalesce(data->>'phone_invalid','false')='true')=${invalid} and (${q}='' or data->>'name' ilike ${pattern} or data->>'business' ilike ${pattern} or data->>'city' ilike ${pattern} or data->>'job_title' ilike ${pattern} or linkedin ilike ${pattern} or phone ilike ${pattern}) and (${stage}='' or stage=${stage}) and (${mode}='all' or (${mode}='overdue' and next_due<now() and stage not in ('won','lost')) or (${mode}='today' and (next_due at time zone 'America/Sao_Paulo')::date=(now() at time zone 'America/Sao_Paulo')::date and stage not in ('won','lost')) or (${mode}='open' and stage not in ('won','lost'))) order by case when next_due<now() and stage not in ('won','lost') then 0 else 1 end,updated_at desc,id limit 101 offset ${offset}`;
+   const summary=await sql`select stage,coalesce(data->>'phone_invalid','false')='true' as phone_invalid,count(*)::int as total,count(*) filter(where next_due<now() and stage not in ('won','lost') and coalesce(data->>'phone_invalid','false')<>'true')::int as overdue,coalesce(sum((data->>'deal_value')::numeric),0) as value from public.crm_leads group by stage,coalesce(data->>'phone_invalid','false')='true'`;
    return res.json({rows:rows.slice(0,100).map(merge),more:rows.length>100,summary});
   }
   if(req.method!=='POST')return res.status(405).end();
@@ -52,14 +52,18 @@ export default async function handler(req,res){
   if(!row)return res.status(404).json({error:'Lead não encontrado.'});
   const lead=merge(row),eventId=uuid.test(String(b.event_id))?b.event_id:randomUUID();
   let patch,kind,description,message=null,wa=null,channel=null,openMode=null;
-  if(b.action==='save'){
+  if(b.action==='phone_status'){
+   const {data}=phoneStatusPatch({...row.data,phone:row.phone},b.invalid);
+   if(b.invalid&&!row.phone)throw Error('Este lead não tem telefone cadastrado.');
+   patch={data};kind=b.invalid?'phone_invalid':'phone_restored';description=b.invalid?'Número marcado como inválido; lead separado do funil comercial':'Número liberado; lead devolvido ao funil comercial';
+  }else if(b.action==='save'){
    const data=validateLead({...lead,...b.lead});
    const messages=b.regenerate?makeMessages({...data,id:lead.id,diagnostic:lead.diagnostic}):Object.fromEntries(Object.keys(ACTIONS).map(k=>[k,String(b.messages?.[k]??lead.messages[k]??'').slice(0,6000)]));
-   patch={data,phone:data.phone,linkedin:data.linkedin,stage:data.stage,messages,next_due:['won','lost'].includes(data.stage)?null:data.next_due};kind='edited';description=data.stage!==lead.stage?'Etapa alterada manualmente':'Dados e mensagens atualizados';
+   patch={data,phone:data.phone,linkedin:data.linkedin,stage:data.stage,messages,next_due:['won','lost'].includes(data.stage)?null:data.next_due};kind='edited';description=data.phone_invalid!==lead.phone_invalid?(data.phone_invalid?'Número marcado como inválido; lead separado do funil comercial':'Número liberado; lead devolvido ao funil comercial'):data.stage!==lead.stage?'Etapa alterada manualmente':'Dados e mensagens atualizados';
   }else if(b.action==='message'){
    if(lead.do_not_contact)throw Error('Este lead está marcado como não contatar.');
    channel=b.channel||'whatsapp';if(!['whatsapp','linkedin'].includes(channel))throw Error('Canal de contato inválido.');
-   if(channel==='whatsapp'&&!lead.phone)throw Error('Adicione um WhatsApp na ficha para abrir a mensagem.');
+   if(channel==='whatsapp')assertWhatsAppAvailable(lead);
    if(channel==='linkedin'&&!lead.linkedin)throw Error('Adicione o perfil do LinkedIn na ficha.');
    const a=ACTIONS[b.type];if(!a)throw Error('Mensagem inválida.');
    message=String(b.message??lead.messages[b.type]??'').trim().slice(0,6000);if(!message)throw Error('Preencha a mensagem antes de abrir a conversa.');

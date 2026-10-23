@@ -117,3 +117,23 @@ test('combines city and neighborhood, falls back from empty columns and avoids d
  ];
  for(const [headers,values,expected]of cases){assert.equal(parseTable(`Nome;Telefone;${headers}\nExemplo;21900000000;${values}`)[0].lead.city,expected,headers);}
 });
+
+
+test('invalid phone is reversible without losing stage, messages or follow-up; WhatsApp is blocked',async()=>{
+ const {phoneStatusPatch,assertWhatsAppAvailable}=await import('../lib/crm-domain.js');
+ const lead={...validateLead({name:'Teste telefone',phone:'21999999999'}),stage:'qualification',next_due:'2026-11-01T12:00:00.000Z',messages:{first:'Texto personalizado'},notes:'Contexto preservado'};
+ assert.equal(lead.phone_invalid,false);
+ const invalid=phoneStatusPatch(lead,true).data;
+ assert.equal(invalid.phone_invalid,true);
+ assert.equal(invalid.stage,lead.stage);
+ assert.equal(invalid.next_due,lead.next_due);
+ assert.deepEqual(invalid.messages,lead.messages);
+ assert.equal(validateLead(invalid).phone_invalid,true);
+ assert.throws(()=>assertWhatsAppAvailable(invalid),/inválido/);
+ assert.throws(()=>phoneStatusPatch({phone:null},true));
+ assert.throws(()=>phoneStatusPatch(lead,'true'));
+ const restored=phoneStatusPatch(invalid,false).data;
+ assert.equal(restored.phone_invalid,false);
+ assert.doesNotThrow(()=>assertWhatsAppAvailable(restored));
+ assert.equal(restored.notes,lead.notes);
+});

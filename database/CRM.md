@@ -44,3 +44,8 @@ Copiar e abrir LinkedIn copia a mensagem selecionada (incluindo as edições fei
 A preparação da abordagem fica no histórico como `linkedin_first`; a segunda como `linkedin_second`. Assim como o WhatsApp, essas ações atualizam etapa e retorno, sem confirmar envio ou entrega. Copiar o texto pelo botão separado não altera a etapa. Migração: `node --env-file=.env.local scripts/crm-schema.mjs crm-linkedin-messaging.sql`.
 
 A abertura do perfil usa a URL do próprio cadastro, sem rota de composição de conversa. A cópia é feita antes de abrir a nova aba.
+
+
+## Números inválidos
+
+A ficha tem o botão **Marcar número como inválido**, e o formulário permite alterar a mesma marca. Os contatos marcados vão para **Números inválidos**, fora do funil principal e dos totais de oportunidades/retornos ativos. A etapa, próxima data de retorno, mensagens e histórico são preservados. O WhatsApp é bloqueado no servidor e na interface; o LinkedIn continua disponível. Após corrigir o telefone, use **Liberar número e voltar ao funil**, ou desmarque a opção nos dados e salve. A correção do telefone não libera automaticamente uma marca existente. Toda marcação/liberação é registrada no histórico. Não há verificação automática de existência no WhatsApp. Registros anteriores sem `phone_invalid` são considerados não marcados.
